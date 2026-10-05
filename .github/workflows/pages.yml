@@ -1,0 +1,50 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build site
+        run: |
+          mkdir -p _site
+          rsync -a --exclude '.git' --exclude '.github' --exclude '_site' ./ _site/
+          # Generate an index page listing the HTML files if the repo doesn't provide one
+          if [ ! -f _site/index.html ]; then
+            {
+              echo '<!doctype html><html><head><meta charset="utf-8">'
+              echo '<meta name="viewport" content="width=device-width, initial-scale=1">'
+              echo "<title>${GITHUB_REPOSITORY#*/}</title></head><body>"
+              echo "<h1>${GITHUB_REPOSITORY#*/}</h1><ul>"
+              (cd _site && find . -name '*.html' -not -name 'index.html' | sed 's|^\./||' | sort) |
+                while read -r f; do echo "<li><a href=\"$f\">$f</a></li>"; done
+              echo '</ul></body></html>'
+            } > _site/index.html
+          fi
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
